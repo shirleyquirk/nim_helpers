@@ -6,27 +6,30 @@ macro dataclass*(x:untyped):untyped =
   ## helper procs. for now, just an initFoo() proc
   ## input is, e.g.
   ## type
-  ##   Foo {.packed.} = object
+  ##   Foo {. pragmas.. .} = object
   ##     x*:int
   ##     y,z*,w: float
-  ##     case kind: FooKind
-  ##     of fkA:
-  ##       i,j:string
-  ##     else:
-  ##       discard
+  ## TODO: variants
   ##
-  ## ok, tbh haven't tested variants
+  ## output is:
+  ## template anonymous:type =
+  ##   type Foo {. pragmas..,inject .} = object
+  ##     x*:int
+  ##     y,z*,w: float
+  ##   proc initFoo(x:int,y,z,w:float):auto = Foo(x:x,y:y,z:z,w:w)
+  ##   Foo
+  ## type
+  ##   FooDataClass {. pragmas.. .} = anonymous()
+  
   result = x.copyNimTree()
-
+  
   x.expectKind(nnkTypeDef)
 
   let basename = x[0]
-  #basename.expectKind(nnkPragmaExpr)
-  #basename[0].expectKind(nnkIdent)
-
+  
   let outname = basename.copyNimTree()
   outname[0] = ident(outname[0].strval & "Dataclass")
-  #type BaseNameDataclass{.packed,...} = helper(templatebody)
+  #type BaseNameDataclass{. pragmalist.. .} = helper(templatebody)
 
   basename[1].add(ident"inject")
   # type BaseName{.inject.} = object
@@ -35,19 +38,20 @@ macro dataclass*(x:untyped):untyped =
   let typedef = x[2]
   let identdefs = typedef[2].copyNimTree()
   var ids: seq[NimNode]
+  
+  #get identdef, ident seqs, stripped of `*` postfix
   for i in 0..<identdefs.len:
-    for j in 0..<identdefs[i].len - 2:
+    for j in 0..<identdefs[i].len - 2: #last two are type and i think pragma?
       if identdefs[i][j].kind == nnkPostfix:
         identdefs[i][j] = identdefs[i][j][1]
       ids.add identdefs[i][j]
+   
   let params = @[ident"auto"] & collect(newSeq,for c in identdefs.children: c)
   let assignments = @[basename[0]] & collect(newSeq, for i in ids: nnkExprColonExpr.newTree(i,i))
 
   let procdef = newProc(ident("init" & basename[0].strval),
                         params,
-                        nnkObjConstr.newTree(
-                          assignments
-                        )
+                        nnkObjConstr.newTree( assignments )
                        )
 
   let templatebody = nnkStmtList.newTree(
