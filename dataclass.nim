@@ -1,4 +1,5 @@
-import macros,sugar
+import macros,sugar,std/genasts,fusion/matching
+{.experimental:"caseStmtMacros".}
 template helper(body:untyped):untyped =
   body
 macro dataclass*(x:untyped):untyped =
@@ -22,11 +23,12 @@ macro dataclass*(x:untyped):untyped =
   ##   FooDataClass {. pragmas.. .} = anonymous()
   
   result = x.copyNimTree()
-  
-  x.expectKind(nnkTypeDef)
-
-  let basename = x[0]
-  
+  x.assertMatch:
+    TypeDef:
+      @basename
+      _
+      @typedef is ObjectTy([_,_,@identdefs])
+        
   let outname = basename.copyNimTree()
   outname[0] = ident(outname[0].strval & "Dataclass")
   #type BaseNameDataclass{. pragmalist.. .} = helper(templatebody)
@@ -34,9 +36,6 @@ macro dataclass*(x:untyped):untyped =
   basename[1].add(ident"inject")
   # type BaseName{.inject.} = object
 
-  x[2].expectKind(nnkObjectTy)
-  let typedef = x[2]
-  let identdefs = typedef[2].copyNimTree()
   var ids: seq[NimNode]
   
   #get identdef, ident seqs, stripped of `*` postfix
@@ -54,17 +53,12 @@ macro dataclass*(x:untyped):untyped =
                         nnkObjConstr.newTree( assignments )
                        )
 
-  let templatebody = nnkStmtList.newTree(
-    nnkTypeSection.newTree(
-      nnkTypeDef.newTree(
-        basename,
-        newEmptyNode(),
-        typedef
-      )
-    ),
-    procdef,
-    basename[0]
-  )
+  let templatebody = genAst(basename,typedef,procdef,name=basename[0]):
+    type
+      basename = typedef
+    procdef
+    name
+  
   result[0] = outname
   result[2] = newCall(ident"helper",[templatebody])
 
