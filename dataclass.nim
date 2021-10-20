@@ -10,7 +10,8 @@ macro dataclass*(x:untyped):untyped =
   ##   Foo {. pragmas.. .} = object
   ##     x*:int
   ##     y,z*,w: float
-  ## TODO: variants, generics
+  ## TODO: variants, 
+  ## generics work in principle. more testing obvs
   ##
   ## output is:
   ## template anonymous:type =
