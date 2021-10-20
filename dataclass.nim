@@ -27,8 +27,15 @@ macro dataclass*(x:untyped):untyped =
     TypeDef:
       @basename
       _
-      @typedef is ObjectTy([_,_,@identdefs])
-        
+      @typedef is ObjectTy([
+                             _,
+                             _,
+                             @identdefs is RecList([ all IdentDefs([Postfix([_,@ids]) | @ids,.._]) ])
+                           ])
+  
+  #return result
+  for i in ids:
+    echo i.treeRepr
   let outname = basename.copyNimTree()
   outname[0] = ident(outname[0].strval & "Dataclass")
   #type BaseNameDataclass{. pragmalist.. .} = helper(templatebody)
@@ -36,15 +43,15 @@ macro dataclass*(x:untyped):untyped =
   basename[1].add(ident"inject")
   # type BaseName{.inject.} = object
 
-  var ids: seq[NimNode]
+  #var ids: seq[NimNode]
   
   #get identdef, ident seqs, stripped of `*` postfix
   for i in 0..<identdefs.len:
     for j in 0..<identdefs[i].len - 2: #last two are type and i think pragma?
       if identdefs[i][j].kind == nnkPostfix:
         identdefs[i][j] = identdefs[i][j][1]
-      ids.add identdefs[i][j]
-   
+      #ids.add identdefs[i][j]
+  
   let params = @[ident"auto"] & collect(newSeq,for c in identdefs.children: c)
   let assignments = @[basename[0]] & collect(newSeq, for i in ids: nnkExprColonExpr.newTree(i,i))
 
