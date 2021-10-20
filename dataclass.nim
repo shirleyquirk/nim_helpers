@@ -2,6 +2,7 @@ import macros,sugar,std/genasts,fusion/matching
 {.experimental:"caseStmtMacros".}
 template helper(body:untyped):untyped =
   body
+
 macro dataclass*(x:untyped):untyped =
   ## dataclass macro replaces a typedef with itself, plus some
   ## helper procs. for now, just an initFoo() proc
@@ -10,8 +11,7 @@ macro dataclass*(x:untyped):untyped =
   ##   Foo {. pragmas.. .} = object
   ##     x*:int
   ##     y,z*,w: float
-  ## TODO: variants, 
-  ## generics work in principle. more testing obvs
+  ## TODO: variants, generics
   ##
   ## output is:
   ## template anonymous:type =
@@ -23,8 +23,6 @@ macro dataclass*(x:untyped):untyped =
   ## type
   ##   FooDataClass {. pragmas.. .} = anonymous()
   
-  #result = x.copyNimTree() #get rid of this too please
-  
   x.assertMatch:
     TypeDef:
       @basename is PragmaExpr([ @name, .._])
@@ -32,12 +30,11 @@ macro dataclass*(x:untyped):untyped =
       @typedef is ObjectTy([
                              _,
                              _,
-                             @identdefs# is RecList([ all IdentDefs([Postfix([_,@ids]) | @ids,.._]) ])
+                             @identdefs# is RecList([ all IdentDefs([Postfix([_,@ids]) | @ids,.._]) ]) #this is NOT how to match ids, you only get the first
                            ])
   
   let outname = ident(name.strval & "Dataclass")
-  #outname[0] = ident(outname[0].strval & "Dataclass")
-  #outname[1] = newEmptyNode()
+
   basename[1].add(ident"inject")
   #[ type BaseNameDataClass = stmtlist:
       type BaseName[T]{.packed,inject.} = object
@@ -45,20 +42,24 @@ macro dataclass*(x:untyped):untyped =
       BaseName
   
   ]#
+
   var ids:seq[NimNode]
   for i in 0..<identdefs.len:
     for j in 0..<identdefs[i].len - 2: #last two are type and i think pragma?
       if identdefs[i][j].kind == nnkPostfix:
         identdefs[i][j] = identdefs[i][j][1] #?can we do this with matching?
       ids.add identdefs[i][j]
-  let params = @[ident"auto"] & collect(newSeq,for c in identdefs.children: c)
-  let assignments = (if genericParams.kind == nnkEmpty: @[name] else: @[nnkBracketExpr.newTree(@[outname] & collect(for p in genericParams:p[0]))]) & collect(for i in ids: nnkExprColonExpr.newTree(i,i))
-
-  #[let procdef = newProc(ident("init" & basename[0].strval),
-                        params,
-                        nnkObjConstr.newTree( assignments )
-                       )
-]#let procdef = nnkProcDef.newTree(
+  echo genericParams.treeRepr
+  let params = collect(`@`([ident"auto"]),for c in identdefs.children: c)
+  let assignments = collect(`@`(
+      if genericParams.kind == nnkEmpty:
+        [name]
+      else:
+        [ nnkBracketExpr.newTree( @[name] & genericParams[0][0..^3]  ) ]
+      ),
+      for i in ids: nnkExprColonExpr.newTree(i,i)
+  )
+  let procdef = nnkProcDef.newTree(
     ident("init" & name.strval),
     newEmptyNode(),#term rewriting
     genericParams,
@@ -67,24 +68,20 @@ macro dataclass*(x:untyped):untyped =
     newEmptyNode(),#reserved
     nnkObjConstr.newTree(assignments)
   )
+  
   let templatebody = nnkStmtList.newTree(
     nnkTypeSection.newTree(nnkTypeDef.newTree(basename,genericParams,typedef)),#genAst(basename,typedef,procdef,name):#=basename[0]):
     procdef,
-    quote do:
-      Bar
-  )
-  #[  type
-      basename[genericParams] = typedef
-    procdef
     name
-  ]#
-  #echo templatebody.treeRepr
+  )
   result = nnkTypeDef.newTree(
     outname,
     newEmptyNode(),#genericParams,
     newCall(ident"helper",[templatebody])
   )
-  echo result.repr
+  #echo result.repr
+  
+######tests#######  
 template ugh():type =
   type Baz[T]{.inject.} = object
     x:T
@@ -96,17 +93,22 @@ template plugh():type =
   Baf
 type
   Foo = int
-  Bar[T]{.dataclass.} = object
+  Bar[T,U]{.dataclass.} = object
     x*: T
-    y,z*,w: float
+    y,z*: float
+    v: U
   BazDataclass = ugh()
-  Boz = plugh()
+  Qux{.dataclass.} = object
+    x,y,z:int
 
-let y = initBaz(3.5)
+
+var x:Bar[float,string]
+let y = initBar(3,1.0,2.0,3.0)
 echo y,typeof(y)
-var z:Baz[float]
-echo z,typeof(z)
-var x:Bar[float]
-let w = initBar(3,1.0,2.0,3.0)
-echo w
 echo x.type,',',x
+
+let z = initQux(5,5,5)
+echo z,typeof(z)
+let w = Qux(x:5,y:5,z:5)
+var v:Qux
+echo w,v
