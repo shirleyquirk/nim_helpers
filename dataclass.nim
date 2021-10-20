@@ -10,7 +10,7 @@ macro dataclass*(x:untyped):untyped =
   ##   Foo {. pragmas.. .} = object
   ##     x*:int
   ##     y,z*,w: float
-  ## TODO: variants
+  ## TODO: variants, generics
   ##
   ## output is:
   ## template anonymous:type =
@@ -22,63 +22,90 @@ macro dataclass*(x:untyped):untyped =
   ## type
   ##   FooDataClass {. pragmas.. .} = anonymous()
   
-  result = x.copyNimTree()
+  #result = x.copyNimTree() #get rid of this too please
+  
   x.assertMatch:
     TypeDef:
-      @basename
-      _
+      @basename is PragmaExpr([ @name, .._])
+      @genericParams
       @typedef is ObjectTy([
                              _,
                              _,
-                             @identdefs is RecList([ all IdentDefs([Postfix([_,@ids]) | @ids,.._]) ])
+                             @identdefs# is RecList([ all IdentDefs([Postfix([_,@ids]) | @ids,.._]) ])
                            ])
   
-  #return result
-  for i in ids:
-    echo i.treeRepr
-  let outname = basename.copyNimTree()
-  outname[0] = ident(outname[0].strval & "Dataclass")
-  #type BaseNameDataclass{. pragmalist.. .} = helper(templatebody)
-
+  let outname = ident(name.strval & "Dataclass")
+  #outname[0] = ident(outname[0].strval & "Dataclass")
+  #outname[1] = newEmptyNode()
   basename[1].add(ident"inject")
-  # type BaseName{.inject.} = object
-
-  #var ids: seq[NimNode]
+  #[ type BaseNameDataClass = stmtlist:
+      type BaseName[T]{.packed,inject.} = object
+        x:T
+      BaseName
   
-  #get identdef, ident seqs, stripped of `*` postfix
+  ]#
+  var ids:seq[NimNode]
   for i in 0..<identdefs.len:
     for j in 0..<identdefs[i].len - 2: #last two are type and i think pragma?
       if identdefs[i][j].kind == nnkPostfix:
-        identdefs[i][j] = identdefs[i][j][1]
-      #ids.add identdefs[i][j]
-  
+        identdefs[i][j] = identdefs[i][j][1] #?can we do this with matching?
+      ids.add identdefs[i][j]
   let params = @[ident"auto"] & collect(newSeq,for c in identdefs.children: c)
-  let assignments = @[basename[0]] & collect(newSeq, for i in ids: nnkExprColonExpr.newTree(i,i))
+  let assignments = (if genericParams.kind == nnkEmpty: @[name] else: @[nnkBracketExpr.newTree(@[outname] & collect(for p in genericParams:p[0]))]) & collect(for i in ids: nnkExprColonExpr.newTree(i,i))
 
-  let procdef = newProc(ident("init" & basename[0].strval),
+  #[let procdef = newProc(ident("init" & basename[0].strval),
                         params,
                         nnkObjConstr.newTree( assignments )
                        )
-
-  let templatebody = genAst(basename,typedef,procdef,name=basename[0]):
-    type
-      basename = typedef
+]#let procdef = nnkProcDef.newTree(
+    ident("init" & name.strval),
+    newEmptyNode(),#term rewriting
+    genericParams,
+    nnkFormalParams.newTree(params),
+    newEmptyNode(),#pragmas
+    newEmptyNode(),#reserved
+    nnkObjConstr.newTree(assignments)
+  )
+  let templatebody = nnkStmtList.newTree(
+    nnkTypeSection.newTree(nnkTypeDef.newTree(basename,genericParams,typedef)),#genAst(basename,typedef,procdef,name):#=basename[0]):
+    procdef,
+    quote do:
+      Bar
+  )
+  #[  type
+      basename[genericParams] = typedef
     procdef
     name
-  
-  result[0] = outname
-  result[2] = newCall(ident"helper",[templatebody])
-
+  ]#
+  #echo templatebody.treeRepr
+  result = nnkTypeDef.newTree(
+    outname,
+    newEmptyNode(),#genericParams,
+    newCall(ident"helper",[templatebody])
+  )
+  echo result.repr
+template ugh():type =
+  type Baz[T]{.inject.} = object
+    x:T
+  proc initBaz[T](x:T):auto = Baz[T](x:x)
+  Baz
+template plugh():type =
+  type Baf{.inject.} = object
+   x:int
+  Baf
 type
   Foo = int
-  Bar{.dataclass.} = object
-    x*: int
+  Bar[T]{.dataclass.} = object
+    x*: T
     y,z*,w: float
-  Baz = float
+  BazDataclass = ugh()
+  Boz = plugh()
 
-
-
-var x:Bar
+let y = initBaz(3.5)
+echo y,typeof(y)
+var z:Baz[float]
+echo z,typeof(z)
+var x:Bar[float]
 let y = initBar(3,1.0,2.0,3.0)
 echo y
-echo x.type,',',x.x
+echo x.type,',',x
