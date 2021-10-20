@@ -106,6 +106,6 @@ echo y,typeof(y)
 var z:Baz[float]
 echo z,typeof(z)
 var x:Bar[float]
-let y = initBar(3,1.0,2.0,3.0)
-echo y
+let w = initBar(3,1.0,2.0,3.0)
+echo w
 echo x.type,',',x
