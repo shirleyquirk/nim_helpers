@@ -33,15 +33,8 @@ macro dataclass*(x:untyped):untyped =
                              @identdefs# is RecList([ all IdentDefs([Postfix([_,@ids]) | @ids,.._]) ]) #this is NOT how to match ids, you only get the first
                            ])
   
-  let outname = ident(name.strval & "Dataclass")
-
+  let outname = gensym(nskType)#ident(name.strval & "Dataclass")
   basename[1].add(ident"inject")
-  #[ type BaseNameDataClass = stmtlist:
-      type BaseName[T]{.packed,inject.} = object
-        x:T
-      BaseName
-  
-  ]#
 
   var ids:seq[NimNode]
   for i in 0..<identdefs.len:
@@ -49,7 +42,7 @@ macro dataclass*(x:untyped):untyped =
       if identdefs[i][j].kind == nnkPostfix:
         identdefs[i][j] = identdefs[i][j][1] #?can we do this with matching?
       ids.add identdefs[i][j]
-  echo genericParams.treeRepr
+
   let params = collect(`@`([ident"auto"]),for c in identdefs.children: c)
   let assignments = collect(`@`(
       if genericParams.kind == nnkEmpty:
@@ -59,6 +52,8 @@ macro dataclass*(x:untyped):untyped =
       ),
       for i in ids: nnkExprColonExpr.newTree(i,i)
   )
+  
+  #proc initFoo[T,U](x:T,y:U,z,w:int):auto = Foo[T,U](x:x,y:y,z:z,w:w)
   let procdef = nnkProcDef.newTree(
     ident("init" & name.strval),
     newEmptyNode(),#term rewriting
@@ -69,17 +64,26 @@ macro dataclass*(x:untyped):untyped =
     nnkObjConstr.newTree(assignments)
   )
   
+  #type Foo[T,U]{.packed,inject.} = object
+  #  x:T
+  #  y:U
+  #  z,w:int
+  #proc initFoo...
+  #Foo
   let templatebody = nnkStmtList.newTree(
-    nnkTypeSection.newTree(nnkTypeDef.newTree(basename,genericParams,typedef)),#genAst(basename,typedef,procdef,name):#=basename[0]):
+    nnkTypeSection.newTree(nnkTypeDef.newTree(basename,genericParams,typedef)),
     procdef,
     name
   )
+  
+  #:tmp_1234 = helper(templatebody) 
   result = nnkTypeDef.newTree(
     outname,
     newEmptyNode(),#genericParams,
     newCall(ident"helper",[templatebody])
   )
-  #echo result.repr
+  
+  echo result.repr
   
 ######tests#######  
 template ugh():type =
