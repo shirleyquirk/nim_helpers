@@ -5,10 +5,11 @@ macro distinctNimNode(names:static varargs[NimNodeKind]) =
   for name in names:
     let tmp = genast(name = ident(($name)[3..^1])):
       type name = distinct NimNode
-      converter `to name`(x:NimNode):name =
-        x.expectKind(`nnk name`)
-        x.name
-      converter toNimNode(x:name):NimNode = x.NimNode
+      #converter `to name`(x:NimNode):name =
+      #  x.expectKind(`nnk name`)
+      #  x.name
+      #converter toNimNode(x:name):NimNode = x.NimNode
+      discard
     for x in tmp:
       result.add x
   #echo result.treeRepr
@@ -55,4 +56,39 @@ nnkNone, nnkEmpty, nnkIdent, nnkSym, nnkType, nnkCharLit, nnkIntLit,
 ]#
 
 import std/enumutils,sequtils
-#distinctNimNode(toSeq(NimNodeKind))
+distinctNimNode(toSeq(NimNodeKind))
+
+macro dispatchImpl(n:NimNode,b:untyped):untyped =
+    buildAst(caseStmt):
+        genAst(n):
+            n.kind
+        for k in NimNodeKind:
+            ofBranch ident($k),
+              genast(b, n,it = ident(n.strval), name = ident ($k)[3..^1]) do:
+                var it{.inject.} = name(n)
+                b
+template dispatch(n:NimNode,body:untyped):untyped =
+    dispatchImpl(n,body)
+
+
+when isMainModule:
+  proc test[T](x:T) = echo "unimplemented ", T
+  proc test(x:Call)
+  proc test(x:StmtList) =
+      echo "test StmtList"
+      for j in x.NimNode:
+          dispatch(j):
+            test(j)
+  proc test(x:Call) =
+      echo "test Call"
+      for i in x.NimNode:
+          i.dispatch:
+              test(i)
+  macro foo(x:untyped) = 
+      #echo x.kind
+      x.dispatch: #TODO: dispatch(x,y...)
+         test(x)
+      #echo fooImpl(x).treeRepr
+  proc bar(y:int):int = y + 1
+  foo:
+    bar(7)
