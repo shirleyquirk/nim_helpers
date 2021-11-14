@@ -1,4 +1,5 @@
 import macros,std/genasts
+import fusion/astdsl #tiny bit prettier
 
 macro distinctNimNode(names:static varargs[NimNodeKind]) =
   result = nnkStmtList.newNimNode
