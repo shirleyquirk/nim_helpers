@@ -43,3 +43,9 @@ block:
   elif x.kind == nnkCall: 2#x.Call
   else: 3
   echo toDistinct(nnkStmtList.newNimNode()) # toDistinct(nnkStmtList.newNimNode().toSafeNimNode) doesn't crash
+
+block:
+  import std/setutils
+  type FooKind = enum
+    a,b,c
+  template bar(s: static set[FooKind] = FooKind.fullSet):untyped = discard
