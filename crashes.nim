@@ -49,3 +49,14 @@ block:
   type FooKind = enum
     a,b,c
   template bar(s: static set[FooKind] = FooKind.fullSet):untyped = discard
+
+block:
+  template typ[T](t:typedesc[T]):type =
+    static: echo "typ"
+    #type t = T 
+    int
+  #type X[T] = typ[T]
+
+  static: echo "1"
+  var x: typ(int)
+  static: echo "2"
