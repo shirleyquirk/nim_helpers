@@ -1,0 +1,38 @@
+## it _is_ possible to add procs to a type with a macro pragma
+## first attempt in dataclass.nim, but i can do it a bit cleaner now
+## instead of that hacky helper template we can do it with nnkStmtListType
+## should check out nnkBlockType as well, not sure what that's about
+## with this one, both the inner and outer type have the _same_ _name_
+## i think they're the same type!
+## the outer name is a Sym so can't have an export marker
+## so exporting definitely happens on the inner one
+## what about pragmas? yep. all work gets done on the inner type.
+
+import macros,std/genasts
+
+macro addProc(x:untyped):untyped =
+  x.expectKind(nnkTypeDef)
+  x[0].expectKind(nnkPragmaExpr)
+  var typname = (if x[0][0].kind == nnkPostfix: x[0][0][1] else: x[0][0])
+  var typraw = x[0]
+  let typ = x[2]
+  let body = genast(typ,typraw,typname):
+    type typraw = typ # postfix*, pragmas attached here.
+    proc foo*(x:typname) = echo x,',',typeof(x)
+    proc bar*[T](x:T) = echo x,',',typeof(x),',',T
+    typname
+  var newtyp = nnkStmtListType.newNimNode
+  body.copyChildrenTo(newtyp)
+  result = x
+  result[0] = gensym(nskType,typname.strval) #make symA refer to identA. pretty neat
+  result[2] = newtyp
+  echo result.treeRepr
+
+type
+  A*{.addProc,deprecated.} = enum hi,lo
+
+foo(A.hi)
+bar(A.lo)
+
+var x:A
+echo x
