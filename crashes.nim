@@ -60,3 +60,8 @@ block:
   static: echo "1"
   var x: typ(int)
   static: echo "2"
+
+#not a crash,but from a nims
+block:
+  import strformat
+  exec &"echo {nimCacheDir()}/{projectName()}.json}"
